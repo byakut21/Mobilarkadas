@@ -31,8 +31,12 @@ void llmWorkerMain(SendPort mainPort) {
     Llama.libraryPath = 'libmtmd.so';
 
     final mp = ModelParams();
-    // CPU-only (Vulkan/OpenCL derlemediyseniz 0 kalmalı)
+    // CPU-only derleme: GPU cihazı yok.
+    // main_gpu varsayılanı 0'dır; GPU yokken llama.cpp
+    // "invalid value for main_gpu: 0 (available devices: 0)" ile modeli reddeder.
+    // -1 = GPU kullanma, tamamen CPU.
     mp.nGpuLayers = 0;
+    mp.mainGpu = -1;
 
     final cp = ContextParams()
       ..nCtx = a['nCtx'] as int
