@@ -41,15 +41,9 @@ class _ModelScreenState extends State<ModelScreen> {
   }
 
   Future<void> _pick() async {
-    // file_picker Android'de seçilen dosyayı önbelleğe kopyalar; biz de
-    // uygulamanın özel dizinine taşıyoruz. Büyük modellerde bu birkaç dakika sürebilir.
-    final res = await FilePicker.platform.pickFiles(
-      type: FileType.any, // .gguf için özel MIME yok
-      withData: false,
-      withReadStream: false,
-    );
-    final f = res?.files.single;
-    if (f == null || f.path == null) return;
+    // .gguf için kayıtlı MIME türü yok; her dosyayı gösterip uzantıyı kendimiz kontrol ediyoruz.
+    final f = await FilePicker.pickFile(type: FileType.any);
+    if (f == null) return;
     if (!f.name.toLowerCase().endsWith('.gguf')) {
       _snack('Lütfen .gguf uzantılı bir dosya seçin.');
       return;
@@ -57,7 +51,11 @@ class _ModelScreenState extends State<ModelScreen> {
     if (e.isLoaded) e.unload();
     setState(() => _importing = true);
     try {
-      await e.importModel(f.path!, f.name);
+      await e.importModel(
+        name: f.name,
+        bytes: f.readAsByteStream(),
+        totalBytes: f.lengthSync(),
+      );
       _snack('Model içe aktarıldı: ${f.name}');
     } catch (err) {
       _snack('İçe aktarma hatası: $err');
@@ -122,9 +120,21 @@ class _ModelScreenState extends State<ModelScreen> {
                           Text(e.stats,
                               style: Theme.of(context).textTheme.bodySmall),
                         if (_importing || loading)
-                          const Padding(
-                            padding: EdgeInsets.only(top: 12),
-                            child: LinearProgressIndicator(),
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: LinearProgressIndicator(
+                              value: _importing ? e.importProgress : null,
+                            ),
+                          ),
+                        if (_importing)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              e.importProgress == null
+                                  ? 'Kopyalanıyor…'
+                                  : 'Kopyalanıyor… %${(e.importProgress! * 100).toStringAsFixed(0)}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
                           ),
                         const SizedBox(height: 12),
                         Wrap(

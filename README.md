@@ -81,8 +81,8 @@ yerel_asistan/
   alırsan yalnızca `lib/core/llm_worker.dart` içindeki `createLlama` alan adlarını
   (ör. `temp`, `nCtx`, `nGpuLayers`) paketteki sınıflara göre düzelt.
 - Debug manifest INTERNET'i kaldırdığı için `flutter run` hot-reload çalışmaz; release APK ile test et.
-- `file_picker` büyük dosyayı önce önbelleğe kopyalar; içe aktarma sırasında geçici olarak
-  model boyutunun ~2 katı boş alan gerekir.
+- Seçilen model uygulamanın özel klasörüne bir kez kopyalanır (model boyutu kadar boş alan gerekir);
+  orijinal dosyayı sonra silebilirsin.
 
 ## GitHub Actions ile APK
 `main` dalına her push'ta `.github/workflows/build-apk.yml` çalışır: llama.cpp'yi NDK ile derler,

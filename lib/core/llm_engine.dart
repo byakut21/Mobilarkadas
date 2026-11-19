@@ -82,27 +82,52 @@ class LlmEngine extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Seçilen dosyayı uygulamanın özel dizinine taşır (dışarıdan erişilemez, kalıcı).
-  Future<String> importModel(String pickedPath, String name) async {
+  /// İçe aktarma ilerlemesi (0..1, bilinmiyorsa null).
+  double? importProgress;
+
+  /// Seçilen dosyayı uygulamanın özel dizinine kopyalar (dışarıdan erişilemez, kalıcı).
+  /// Android'de seçici içerik URI'si verdiği için veriyi akış olarak okuyoruz.
+  Future<String> importModel({
+    required String name,
+    required Stream<List<int>> bytes,
+    int? totalBytes,
+  }) async {
     final dir = Directory('${(await getApplicationSupportDirectory()).path}/models');
     await dir.create(recursive: true);
-    final dest = File('${dir.path}/$name');
-    final src = File(pickedPath);
-    if (src.path != dest.path) {
-      try {
-        await src.rename(dest.path); // aynı bölümdeyse anında
-      } on FileSystemException {
-        await src.copy(dest.path);
-        await src.delete().catchError((_) => src);
-      }
-    }
-    // Eski modelleri temizle (depolama tasarrufu)
+    // Eski modelleri önce sil (depolama tasarrufu)
     await for (final f in dir.list()) {
-      if (f is File && f.path != dest.path) await f.delete();
+      if (f is File) await f.delete();
     }
+    final tmp = File('${dir.path}/$name.part');
+    final sink = tmp.openWrite();
+    var done = 0;
+    var lastNotify = 0;
+    importProgress = totalBytes == null ? null : 0;
+    notifyListeners();
+    try {
+      await for (final chunk in bytes) {
+        sink.add(chunk);
+        done += chunk.length;
+        if (totalBytes != null && done - lastNotify > 32 * 1024 * 1024) {
+          lastNotify = done;
+          importProgress = done / totalBytes;
+          notifyListeners();
+        }
+      }
+      await sink.flush();
+      await sink.close();
+    } catch (_) {
+      await sink.close();
+      if (await tmp.exists()) await tmp.delete();
+      importProgress = null;
+      notifyListeners();
+      rethrow;
+    }
+    final dest = await tmp.rename('${dir.path}/$name');
     settings.modelPath = dest.path;
     settings.modelName = name;
     await settings.save();
+    importProgress = null;
     notifyListeners();
     return dest.path;
   }

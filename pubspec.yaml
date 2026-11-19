@@ -16,7 +16,7 @@ dependencies:
   llama_cpp_dart:
     path: .build/llama_cpp_dart
   # Dosya seçici (Android SAF; ağ izni gerektirmez)
-  file_picker: ^8.1.2
+  file_picker: ^13.4.0
   # Uygulamaya özel dizin (modeli buraya kopyalıyoruz)
   path_provider: ^2.1.4
   # Ayarların yerel saklanması
