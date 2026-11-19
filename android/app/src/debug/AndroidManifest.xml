@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Flutter şablonu debug derlemede hot-reload için INTERNET ekler.
+  Build-type manifest'leri main'den önceliklidir; bu yüzden kaldırma burada da yapılır.
+  Not: Bu durumda `flutter run` hot-reload çalışmaz; testi release/profile APK ile yapın.
+  Hot-reload istiyorsanız yalnızca geliştirme sırasında bu satırı silin.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
+</manifest>
