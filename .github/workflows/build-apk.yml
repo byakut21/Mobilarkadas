@@ -31,7 +31,7 @@ jobs:
       # ---- llama.cpp native kütüphaneleri (önbellekli) ----
       - name: Native kütüphane önbelleği
         id: native-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: android/app/src/main/jniLibs
           key: llama-native-v0.2.0-armv82-${{ hashFiles('scripts/build_llama_android.sh') }}
@@ -42,6 +42,13 @@ jobs:
           export ANDROID_NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
           echo "NDK: $ANDROID_NDK"
           bash scripts/build_llama_android.sh
+
+      - name: Native kütüphaneleri önbelleğe kaydet
+        if: steps.native-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: android/app/src/main/jniLibs
+          key: ${{ steps.native-cache.outputs.cache-primary-key }}
 
       # ---- Flutter Android iskeleti (repo'daki manifest'ler korunur) ----
       - name: Android iskeletini oluştur

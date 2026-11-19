@@ -77,7 +77,7 @@ yerel_asistan/
 | 7–8B | ~4.5 GB | 12 GB+ |
 
 ## Bilinen notlar
-- `llama_cpp_dart` **0.2.0** sürümüne sabitlendi (llama.cpp `b8595b16e`). Sürümü değiştirirsen `scripts/build_llama_android.sh` içindeki `LCD_TAG`ı da değiştir.
+- `llama_cpp_dart` GitHub v0.2.0 etiketine sabitlendi (llama.cpp `b8595b16e`). Sürümü değiştirirsen `scripts/build_llama_android.sh` içindeki `LCD_TAG`ı da değiştir.
   alırsan yalnızca `lib/core/llm_worker.dart` içindeki `createLlama` alan adlarını
   (ör. `temp`, `nCtx`, `nGpuLayers`) paketteki sınıflara göre düzelt.
 - Debug manifest INTERNET'i kaldırdığı için `flutter run` hot-reload çalışmaz; release APK ile test et.

@@ -11,7 +11,10 @@ dependencies:
   flutter:
     sdk: flutter
   # llama.cpp FFI bağlayıcısı. API bu sürüme göre yazıldı (lib/core/llm_worker.dart).
-  llama_cpp_dart: 0.2.0  # llama.cpp b8595b16e ile eşleşir
+  llama_cpp_dart:
+    git:
+      url: https://github.com/netdur/llama_cpp_dart
+      ref: v0.2.0 # llama.cpp b8595b16e ile eşleşir (scripts/build_llama_android.sh)
   # Dosya seçici (Android SAF; ağ izni gerektirmez)
   file_picker: ^8.1.2
   # Uygulamaya özel dizin (modeli buraya kopyalıyoruz)
