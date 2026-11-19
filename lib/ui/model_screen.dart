@@ -53,8 +53,9 @@ class _ModelScreenState extends State<ModelScreen> {
     try {
       await e.importModel(
         name: f.name,
-        bytes: f.readAsByteStream(),
-        totalBytes: f.lengthSync(),
+        sourcePath: f.path, // content:// ise null olur → akışla kopyalanır
+        openStream: f.readAsByteStream,
+        sourceBytes: f.lengthSync() ?? await f.length(),
       );
       _snack('Model içe aktarıldı: ${f.name}');
     } catch (err) {

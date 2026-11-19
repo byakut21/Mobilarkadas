@@ -91,62 +91,76 @@ class LlmEngine extends ChangeNotifier {
   /// Android'de seçici içerik URI'si verdiği için veriyi akış olarak okuyoruz.
   Future<String> importModel({
     required String name,
-    required Stream<List<int>> bytes,
-    int? totalBytes,
+    String? sourcePath, // seçici gerçek dosya yolu verdiyse
+    required Stream<List<int>> Function() openStream, // yol yoksa (content://) akış
+    int? sourceBytes,
   }) async {
     // Uygulamanın dahili, başka uygulamaların erişemediği klasörü
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory('${docs.absolute.path}/models');
     await dir.create(recursive: true);
-    // Eski modelleri önce sil (depolama tasarrufu)
-    await for (final f in dir.list()) {
-      if (f is File) await f.delete();
+    final targetPath = '${dir.absolute.path}/$name';
+
+    // 1) Eski .gguf (ve yarım .part) dosyalarını tamamen sil
+    for (final f in dir.listSync()) {
+      if (f is File) f.deleteSync();
     }
-    final tmp = File('${dir.path}/$name.part');
-    final sink = tmp.openWrite();
-    var done = 0;
-    var lastNotify = 0;
-    importProgress = totalBytes == null ? null : 0;
+
+    // Kaynak boyutu: gerçek yol varsa dosyadan, yoksa seçicinin bildirdiği değerden
+    final srcFile = sourcePath != null ? File(sourcePath) : null;
+    final expected = (srcFile != null && srcFile.existsSync())
+        ? srcFile.lengthSync()
+        : sourceBytes;
+
+    importProgress = expected == null ? null : 0;
     notifyListeners();
+
     try {
-      await for (final chunk in bytes) {
-        sink.add(chunk);
-        done += chunk.length;
-        if (totalBytes != null && done - lastNotify > 32 * 1024 * 1024) {
-          lastNotify = done;
-          importProgress = done / totalBytes;
-          notifyListeners();
+      if (srcFile != null && srcFile.existsSync()) {
+        // 2a) Gerçek dosya yolu: File.copy — tamamlanınca dosya kapalıdır
+        await srcFile.copy(targetPath);
+      } else {
+        // 2b) content:// URI: akışı kopyala, flush + close bitene kadar bekle
+        final sink = File(targetPath).openWrite();
+        var done = 0, lastNotify = 0;
+        try {
+          await for (final chunk in openStream()) {
+            sink.add(chunk);
+            done += chunk.length;
+            if (expected != null && done - lastNotify > 32 * 1024 * 1024) {
+              lastNotify = done;
+              importProgress = done / expected;
+              notifyListeners();
+            }
+          }
+          await sink.flush();
+        } finally {
+          await sink.close(); // dosya tanıtıcısı kesin kapanır
         }
       }
-      await sink.flush();
-      await sink.close();
+
+      // 3) Boyut doğrulaması
+      final got = File(targetPath).lengthSync();
+      if (got == 0 || (expected != null && got != expected)) {
+        throw Exception('Dosya kopyalama eksik yapıldı ($got / ${expected ?? '?'} bayt).');
+      }
+      final bad = await validateGguf(targetPath);
+      if (bad != null) throw Exception(bad);
     } catch (_) {
-      await sink.close();
-      if (await tmp.exists()) await tmp.delete();
+      final t = File(targetPath);
+      if (t.existsSync()) t.deleteSync();
       importProgress = null;
       notifyListeners();
       rethrow;
     }
-    final dest = await tmp.rename('${dir.path}/$name');
-    if (totalBytes != null && done != totalBytes) {
-      await dest.delete();
-      importProgress = null;
-      notifyListeners();
-      throw Exception('Kopyalama eksik kaldı ($done / $totalBytes bayt). Tekrar deneyin.');
-    }
-    final bad = await validateGguf(dest.absolute.path);
-    if (bad != null) {
-      await dest.delete();
-      importProgress = null;
-      notifyListeners();
-      throw Exception(bad);
-    }
-    settings.modelPath = dest.absolute.path;
+
+    settings.modelPath = targetPath;
     settings.modelName = name;
+    settings.modelBytes = expected ?? File(targetPath).lengthSync();
     await settings.save();
     importProgress = null;
     notifyListeners();
-    return dest.absolute.path;
+    return targetPath;
   }
 
   /// Dosya geçerli bir GGUF mu? Sorun varsa açıklama, yoksa null döner.
@@ -201,6 +215,7 @@ class LlmEngine extends ChangeNotifier {
       'cmd': 'load',
       'args': {
         'path': path,
+        'expectedBytes': settings.modelBytes,
         'nCtx': settings.nCtx,
         'nBatch': settings.nBatch,
         'nThreads': settings.nThreads,

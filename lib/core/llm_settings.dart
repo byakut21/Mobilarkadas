@@ -18,6 +18,7 @@ Hesap, metraj ve teknik konularda adım adım ve birimleriyle yaz.''';
 class LlmSettings {
   String? modelPath;
   String modelName;
+  int? modelBytes; // kaynak dosya boyutu (kopya doğrulaması)
   ChatTemplateKind template;
   String systemPrompt;
 
@@ -36,6 +37,7 @@ class LlmSettings {
   LlmSettings({
     this.modelPath,
     this.modelName = '',
+    this.modelBytes,
     this.template = ChatTemplateKind.chatml,
     this.systemPrompt = kDefaultSystemPrompt,
     this.temperature = 0.7,
@@ -54,6 +56,7 @@ class LlmSettings {
   Map<String, dynamic> toJson() => {
         'modelPath': modelPath,
         'modelName': modelName,
+        'modelBytes': modelBytes,
         'template': template.name,
         'systemPrompt': systemPrompt,
         'temperature': temperature,
@@ -69,6 +72,7 @@ class LlmSettings {
   factory LlmSettings.fromJson(Map<String, dynamic> j) => LlmSettings(
         modelPath: j['modelPath'] as String?,
         modelName: (j['modelName'] as String?) ?? '',
+        modelBytes: (j['modelBytes'] as num?)?.toInt(),
         template: ChatTemplateKind.values.firstWhere(
           (e) => e.name == j['template'],
           orElse: () => ChatTemplateKind.chatml,

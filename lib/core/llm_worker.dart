@@ -69,8 +69,20 @@ void llmWorkerMain(SendPort mainPort) {
           loadArgs = Map<String, dynamic>.from(msg['args'] as Map);
           final s = Map<String, dynamic>.from(msg['sampler'] as Map);
           final path = File(loadArgs!['path'] as String).absolute.path;
-          if (!File(path).existsSync()) {
+          final target = File(path);
+          if (!target.existsSync()) {
             throw StateError('Dosya yok: $path');
+          }
+          // createLlama öncesi son kontrol: kopya kaynakla aynı boyutta ve boş değil
+          final expected = loadArgs!['expectedBytes'] as int?;
+          final got = target.lengthSync();
+          if (got == 0 || (expected != null && got != expected)) {
+            mainPort.send({
+              'type': 'error',
+              'message': 'Dosya kopyalama eksik yapıldı ($got / ${expected ?? '?'} bayt). '
+                  'Modeli yeniden seçin.',
+            });
+            return;
           }
           loadArgs!['path'] = path;
 
