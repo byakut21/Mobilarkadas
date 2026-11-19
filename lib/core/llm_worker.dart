@@ -5,8 +5,11 @@
 // yalnızca bu dosyadaki `_createLlama` ve üretim döngüsünü uyarlamanız yeterlidir.
 
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+
+import 'package:ffi/ffi.dart';
 
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
 
@@ -49,6 +52,7 @@ void llmWorkerMain(SendPort mainPort) {
       modelParams: mp,
       contextParams: cp,
       samplerParams: sp,
+      verbose: true, // log susturmayı kapat; kendi yakalayıcımız devrede
     );
   }
 
@@ -69,15 +73,32 @@ void llmWorkerMain(SendPort mainPort) {
             throw StateError('Dosya yok: $path');
           }
           loadArgs!['path'] = path;
+
+          // Tanı: backend durumu
+          Llama.libraryPath = 'libmtmd.so';
+          _startLogCapture();
+          Llama.lib.llama_backend_init();
+          Llama.lib.ggml_backend_load_all();
+          final devs = Llama.lib.ggml_backend_dev_count();
+          final regs = Llama.lib.ggml_backend_reg_count();
+          _logTail.add('[tanı] backend reg=$regs dev=$devs, dosya=${File(path).lengthSync()} bayt');
+
           llama = createLlama(loadArgs!, s);
+          _stopLogCapture();
           samplerKey = msg['samplerKey'] as String;
           mainPort.send({'type': 'loaded', 'ms': sw.elapsedMilliseconds});
         } catch (e, st) {
           llama = null;
+          String logs = '';
+          try {
+            logs = _logSummary();
+            _stopLogCapture();
+          } catch (_) {}
           mainPort.send({
             'type': 'error',
-            'message': _explainLoadError(e, loadArgs),
-            'detail': '$e\n${st.toString().split('\n').take(6).join('\n')}',
+            'message': _explainLoadError(e, loadArgs, logs),
+            'detail': '--- llama.cpp log ---\n$logs\n\n--- Dart ---\n$e\n'
+                '${st.toString().split('\n').take(4).join('\n')}',
           });
         }
 
@@ -183,8 +204,21 @@ int _longest(List<String> s) =>
     s.fold<int>(0, (m, e) => e.length > m ? e.length : m);
 
 /// C++ / FFI hatasını anlaşılır Türkçe açıklamaya çevirir.
-String _explainLoadError(Object e, Map<String, dynamic>? a) {
+String _explainLoadError(Object e, Map<String, dynamic>? a, [String logs = '']) {
   final t = e.toString();
+  final l = logs.toLowerCase();
+  if (l.contains('unknown pre-tokenizer') || l.contains('unknown model architecture')) {
+    return 'Bu GGUF, uygulamadaki llama.cpp sürümünün tanımadığı bir biçimde (yeni tokenizer/mimari) '
+        'dönüştürülmüş. Aynı modelin başka bir yükleyiciden (ör. bartowski, Qwen resmi) GGUF\'unu deneyin '
+        'ya da llama.cpp sürümünü güncelleyelim.';
+  }
+  if (l.contains('no backends')) {
+    return 'llama.cpp hesaplama birimi (CPU backend) yüklenemedi. Bu bir derleme sorunu; '
+        'teknik ayrıntıyı bana iletin.';
+  }
+  if (l.contains('failed to mmap') || l.contains('mmap failed')) {
+    return 'Model belleğe eşlenemedi (mmap). RAM yetersiz olabilir; daha küçük model deneyin.';
+  }
   final path = a?['path'];
   if (t.contains('Failed to load dynamic library') || t.contains('dlopen')) {
     return 'llama.cpp kütüphanesi açılamadı (libmtmd.so). APK bu cihazın işlemcisiyle '
@@ -201,4 +235,54 @@ String _explainLoadError(Object e, Map<String, dynamic>? a) {
         'n_ctx değerini düşürün (ör. 1024) veya daha küçük model seçin.';
   }
   return 'Model yüklenemedi: $t';
+}
+
+// ---------------- llama.cpp log yakalama ----------------
+// llama.cpp hata sebebini stderr'e yazar; Android'de görünmez. Yükleme sırasında
+// logları bir tampona alıp hata mesajına ekliyoruz.
+
+final List<String> _logTail = [];
+String _logLine = '';
+NativeCallable<LlamaLogCallback>? _logCallable;
+
+void _onNativeLog(int level, Pointer<Char> text, Pointer<Void> _) {
+  if (text == nullptr) return;
+  final s = text.cast<Utf8>().toDartString();
+  _logLine += s;
+  while (_logLine.contains('\n')) {
+    final i = _logLine.indexOf('\n');
+    final line = _logLine.substring(0, i).trimRight();
+    _logLine = _logLine.substring(i + 1);
+    if (line.isEmpty) continue;
+    _logTail.add(line);
+    if (_logTail.length > 60) _logTail.removeAt(0);
+  }
+}
+
+/// Yükleme öncesi: log'u tampona yönlendir.
+void _startLogCapture() {
+  _logTail.clear();
+  _logLine = '';
+  _logCallable ??= NativeCallable<LlamaLogCallback>.isolateLocal(_onNativeLog);
+  Llama.lib.llama_log_set(_logCallable!.nativeFunction, nullptr);
+}
+
+/// Yükleme sonrası: üretim sırasında başka thread'lerden log gelmesin diye sustur.
+void _stopLogCapture() {
+  Llama.lib.llama_log_set(
+      Pointer.fromFunction<LlamaLogCallback>(Llama.llamaLogCallbackNull),
+      nullptr);
+}
+
+/// Hata için önemli log satırları (error/warn/failed/unknown içerenler + son satırlar).
+String _logSummary() {
+  if (_logLine.trim().isNotEmpty) _logTail.add(_logLine.trim());
+  final important = _logTail
+      .where((l) => RegExp(r'error|fail|unknown|invalid|unsupported|cannot|not found|exception|warn',
+              caseSensitive: false)
+          .hasMatch(l))
+      .toList();
+  final last = _logTail.length > 15 ? _logTail.sublist(_logTail.length - 15) : _logTail;
+  final seen = <String>{};
+  return [...important, ...last].where(seen.add).join('\n');
 }

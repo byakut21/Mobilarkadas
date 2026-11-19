@@ -15,6 +15,8 @@ dependencies:
   # (pub.dev'de 0.2.0 yok; git deposu kırık symlink içerdiği için doğrudan git bağımlılığı olmuyor)
   llama_cpp_dart:
     path: .build/llama_cpp_dart
+  # C string dönüşümü (llama.cpp log yakalama)
+  ffi: ^2.1.4
   # Dosya seçici (Android SAF; ağ izni gerektirmez)
   file_picker: ^13.4.0
   # Uygulamaya özel dizin (modeli buraya kopyalıyoruz)
