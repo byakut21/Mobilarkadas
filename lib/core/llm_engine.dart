@@ -22,6 +22,7 @@ class LlmEngine extends ChangeNotifier {
   String? lastError;
   String? lastErrorDetail; // teknik ayrıntı (stack trace başı)
   String stats = '';
+  String? lastPrompt; // modele en son gönderilen ham prompt (doğrulama için)
 
   Isolate? _isolate;
   SendPort? _toWorker;
@@ -237,11 +238,15 @@ class LlmEngine extends ChangeNotifier {
     messages.add(ChatMessage('user', t));
     final prompt = buildPrompt(
       kind: settings.template,
-      systemPrompt: settings.systemPrompt, // her sorguda enjekte
+      // Her sorguda bağlamın en başına enjekte; boşsa varsayılan talimat
+      systemPrompt: settings.systemPrompt.trim().isEmpty
+          ? kDefaultSystemPrompt
+          : settings.systemPrompt,
       history: messages,
       nCtx: settings.nCtx,
       maxTokens: settings.maxTokens,
     );
+    lastPrompt = prompt;
     messages.add(ChatMessage('assistant', ''));
     status = EngineStatus.generating;
     lastError = null;

@@ -277,6 +277,18 @@ class _ModelScreenState extends State<ModelScreen> {
                     child: const Text('Varsayılana dön'),
                   ),
                 ),
+                if (e.lastPrompt != null)
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('Son gönderilen ham prompt'),
+                    subtitle: const Text('Sistem talimatının nasıl eklendiğini gösterir'),
+                    children: [
+                      SelectableText(
+                        e.lastPrompt!,
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                      ),
+                    ],
+                  ),
                 const SizedBox(height: 24),
               ],
             ),
