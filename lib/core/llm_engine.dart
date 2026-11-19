@@ -20,6 +20,7 @@ class LlmEngine extends ChangeNotifier {
 
   EngineStatus status = EngineStatus.idle;
   String? lastError;
+  String? lastErrorDetail; // teknik ayrıntı (stack trace başı)
   String stats = '';
 
   Isolate? _isolate;
@@ -72,6 +73,7 @@ class LlmEngine extends ChangeNotifier {
         stats = 'Model RAM\'den boşaltıldı';
       case 'error':
         lastError = m['message'] as String;
+        lastErrorDetail = m['detail'] as String?;
         if (_loadCompleter != null && !_loadCompleter!.isCompleted) {
           status = EngineStatus.error; // yükleme başarısız
           _loadCompleter!.completeError(lastError!);
@@ -92,7 +94,9 @@ class LlmEngine extends ChangeNotifier {
     required Stream<List<int>> bytes,
     int? totalBytes,
   }) async {
-    final dir = Directory('${(await getApplicationSupportDirectory()).path}/models');
+    // Uygulamanın dahili, başka uygulamaların erişemediği klasörü
+    final docs = await getApplicationDocumentsDirectory();
+    final dir = Directory('${docs.absolute.path}/models');
     await dir.create(recursive: true);
     // Eski modelleri önce sil (depolama tasarrufu)
     await for (final f in dir.list()) {
@@ -124,12 +128,43 @@ class LlmEngine extends ChangeNotifier {
       rethrow;
     }
     final dest = await tmp.rename('${dir.path}/$name');
-    settings.modelPath = dest.path;
+    if (totalBytes != null && done != totalBytes) {
+      await dest.delete();
+      importProgress = null;
+      notifyListeners();
+      throw Exception('Kopyalama eksik kaldı ($done / $totalBytes bayt). Tekrar deneyin.');
+    }
+    final bad = await validateGguf(dest.absolute.path);
+    if (bad != null) {
+      await dest.delete();
+      importProgress = null;
+      notifyListeners();
+      throw Exception(bad);
+    }
+    settings.modelPath = dest.absolute.path;
     settings.modelName = name;
     await settings.save();
     importProgress = null;
     notifyListeners();
-    return dest.path;
+    return dest.absolute.path;
+  }
+
+  /// Dosya geçerli bir GGUF mu? Sorun varsa açıklama, yoksa null döner.
+  static Future<String?> validateGguf(String path) async {
+    final f = File(path);
+    if (!await f.exists()) return 'Model dosyası bulunamadı: $path';
+    final len = await f.length();
+    if (len < 1024 * 1024) return 'Dosya çok küçük ($len bayt); indirme yarım kalmış olabilir.';
+    final raf = await f.open();
+    try {
+      final magic = String.fromCharCodes(await raf.read(4));
+      if (magic != 'GGUF') {
+        return 'Bu dosya GGUF değil (başlık: "$magic"). Doğru .gguf dosyasını seçin.';
+      }
+    } finally {
+      await raf.close();
+    }
+    return null;
   }
 
   Map<String, dynamic> _sampler() => {
@@ -140,9 +175,18 @@ class LlmEngine extends ChangeNotifier {
       };
 
   Future<void> load() async {
-    final path = settings.modelPath;
-    if (path == null || !File(path).existsSync()) {
-      lastError = 'Model dosyası bulunamadı. Önce .gguf seçin.';
+    final stored = settings.modelPath;
+    if (stored == null) {
+      lastError = 'Önce bir .gguf dosyası seçin.';
+      status = EngineStatus.error;
+      notifyListeners();
+      return;
+    }
+    lastErrorDetail = null;
+    final path = File(stored).absolute.path; // C++ tarafına kesin yerel yol
+    final bad = await validateGguf(path);
+    if (bad != null) {
+      lastError = '$bad\nModeli yeniden seçin.';
       status = EngineStatus.error;
       notifyListeners();
       return;

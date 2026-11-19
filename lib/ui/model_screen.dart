@@ -105,6 +105,9 @@ class _ModelScreenState extends State<ModelScreen> {
                         Text(s.modelName.isEmpty
                             ? 'Seçilmedi'
                             : '${s.modelName}  •  ${_size()}'),
+                        if (s.modelPath != null)
+                          SelectableText(s.modelPath!,
+                              style: Theme.of(context).textTheme.labelSmall),
                         const SizedBox(height: 4),
                         Text(
                           switch (e.status) {
@@ -119,6 +122,34 @@ class _ModelScreenState extends State<ModelScreen> {
                         if (e.stats.isNotEmpty)
                           Text(e.stats,
                               style: Theme.of(context).textTheme.bodySmall),
+                        if (e.lastError != null)
+                          Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(top: 8),
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.errorContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SelectableText(e.lastError!),
+                                if (e.lastErrorDetail != null)
+                                  ExpansionTile(
+                                    tilePadding: EdgeInsets.zero,
+                                    title: const Text('Teknik ayrıntı'),
+                                    children: [
+                                      SelectableText(
+                                        e.lastErrorDetail!,
+                                        style: const TextStyle(
+                                            fontFamily: 'monospace', fontSize: 11),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
                         if (_importing || loading)
                           Padding(
                             padding: const EdgeInsets.only(top: 12),

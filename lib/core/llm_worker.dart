@@ -5,6 +5,7 @@
 // yalnızca bu dosyadaki `_createLlama` ve üretim döngüsünü uyarlamanız yeterlidir.
 
 import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 
 import 'package:llama_cpp_dart/llama_cpp_dart.dart';
@@ -63,12 +64,21 @@ void llmWorkerMain(SendPort mainPort) {
           final sw = Stopwatch()..start();
           loadArgs = Map<String, dynamic>.from(msg['args'] as Map);
           final s = Map<String, dynamic>.from(msg['sampler'] as Map);
+          final path = File(loadArgs!['path'] as String).absolute.path;
+          if (!File(path).existsSync()) {
+            throw StateError('Dosya yok: $path');
+          }
+          loadArgs!['path'] = path;
           llama = createLlama(loadArgs!, s);
           samplerKey = msg['samplerKey'] as String;
           mainPort.send({'type': 'loaded', 'ms': sw.elapsedMilliseconds});
-        } catch (e) {
+        } catch (e, st) {
           llama = null;
-          mainPort.send({'type': 'error', 'message': 'Model yüklenemedi: $e'});
+          mainPort.send({
+            'type': 'error',
+            'message': _explainLoadError(e, loadArgs),
+            'detail': '$e\n${st.toString().split('\n').take(6).join('\n')}',
+          });
         }
 
       case 'generate':
@@ -171,3 +181,24 @@ void llmWorkerMain(SendPort mainPort) {
 
 int _longest(List<String> s) =>
     s.fold<int>(0, (m, e) => e.length > m ? e.length : m);
+
+/// C++ / FFI hatasını anlaşılır Türkçe açıklamaya çevirir.
+String _explainLoadError(Object e, Map<String, dynamic>? a) {
+  final t = e.toString();
+  final path = a?['path'];
+  if (t.contains('Failed to load dynamic library') || t.contains('dlopen')) {
+    return 'llama.cpp kütüphanesi açılamadı (libmtmd.so). APK bu cihazın işlemcisiyle '
+        'uyumsuz olabilir (eski ARM). Hata: $t';
+  }
+  if (t.contains('Could not load model')) {
+    return 'llama.cpp modeli açamadı: $path\n'
+        'Olası sebepler: dosya bozuk/yarım, ya da model mimarisi bu llama.cpp sürümünden yeni '
+        '(daha eski/yaygın bir model deneyin, ör. Qwen2.5 veya Llama 3.2). '
+        'RAM yetmiyorsa daha küçük bir Q4 modeli seçin.';
+  }
+  if (t.contains('Could not create context')) {
+    return 'Model açıldı ama bağlam oluşturulamadı: RAM yetersiz. '
+        'n_ctx değerini düşürün (ör. 1024) veya daha küçük model seçin.';
+  }
+  return 'Model yüklenemedi: $t';
+}
