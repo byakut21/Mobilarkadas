@@ -30,7 +30,7 @@ yerel_asistan/
 
 ## Kurulum
 
-1. İskeleti oluştur, bu dosyaları üstüne kopyala:
+1. İskeleti oluştur, bu dosyaları üstüne kopyala, paket kaynağını indir (`./scripts/fetch_llama_cpp_dart.sh`):
    ```bash
    flutter create --platforms android --org tr.burak yerel_asistan
    # bu paketteki lib/, android/app/src/, scripts/, pubspec.yaml dosyalarını üzerine yaz

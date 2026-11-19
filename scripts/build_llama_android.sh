@@ -16,8 +16,8 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/.build/llama_cpp_dart"
 OUT="$ROOT/android/app/src/main/jniLibs/$ABI"
 
-if [ ! -d "$WORK/.git" ]; then
-  git clone --depth 1 --branch "$LCD_TAG" https://github.com/netdur/llama_cpp_dart "$WORK"
+bash "$ROOT/scripts/fetch_llama_cpp_dart.sh"
+if [ ! -f "$WORK/src/llama.cpp/CMakeLists.txt" ]; then
   git -C "$WORK" submodule update --init --depth 1 src/llama.cpp
 fi
 

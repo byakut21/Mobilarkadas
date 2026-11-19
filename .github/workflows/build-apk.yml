@@ -76,7 +76,9 @@ jobs:
           cat "$F"
 
       - name: Bağımlılıklar
-        run: flutter pub get
+        run: |
+          bash scripts/fetch_llama_cpp_dart.sh
+          flutter pub get
 
       - name: APK derle
         run: flutter build apk --release --target-platform android-arm64
